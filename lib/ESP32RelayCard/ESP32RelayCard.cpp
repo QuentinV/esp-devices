@@ -110,7 +110,8 @@ void ESP32RelayCard::_mqttReconnect() {
 }
 
 void ESP32RelayCard::_triggerRelay(const RelayConfig& relay) {
-    digitalWrite(relay.pin, HIGH);
+    int read = digitalRead(relay.pin);
+    digitalWrite(relay.pin, read == HIGH ? LOW : HIGH);
     if (relay.pulseMs > 0) {
         delay(relay.pulseMs);
         digitalWrite(relay.pin, LOW);
@@ -127,7 +128,9 @@ void ESP32RelayCard::_setupWebServer() {
         _server.on(routeName.c_str(), HTTP_POST,
             [this, i](AsyncWebServerRequest* req) {
                 _triggerRelay(_cfg.relays[i]);
-                req->send(200, "application/json", "{\"ok\":true}");
+                int read = digitalRead(_cfg.relays[i].pin);
+                String state = read == HIGH ? "high" : "low";
+                req->send(200, "application/json", "{\"ok\":true, \"state\": \"" + state + "\"}");
             });
     }
 
