@@ -73,7 +73,8 @@ private:
     static void _mqttStaticCallback(char* topic, byte* payload, unsigned int len);
 
     // Relay
-    void _triggerRelay(const RelayConfig& relay);
+    void _triggerRelay(const RelayConfig& relay, int state);
+    RelayConfig* _findRelay(String relayId);
 
     // State
     CardConfig          _cfg;

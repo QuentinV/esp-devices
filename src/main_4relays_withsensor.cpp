@@ -56,7 +56,7 @@ void setup() {
   }
 
   card = new ESP32RelayCard(cfg);
-  card->webServer().on("/state", HTTP_GET, [](AsyncWebServerRequest *request) {
+  card->webServer().on("/states", HTTP_GET, [](AsyncWebServerRequest *request) {
       sensors_event_t humidity, temp;
       aht.getEvent(&humidity, &temp);
 

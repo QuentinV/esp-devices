@@ -109,28 +109,70 @@ void ESP32RelayCard::_mqttReconnect() {
     }
 }
 
-void ESP32RelayCard::_triggerRelay(const RelayConfig& relay) {
-    int read = digitalRead(relay.pin);
-    digitalWrite(relay.pin, read == HIGH ? LOW : HIGH);
+void ESP32RelayCard::_triggerRelay(const RelayConfig& relay, int state) {
+    int nstate = state == -1 ? (digitalRead(relay.pin) == HIGH ? LOW : HIGH) : state;
+    digitalWrite(relay.pin, nstate);
     if (relay.pulseMs > 0) {
         delay(relay.pulseMs);
         digitalWrite(relay.pin, LOW);
     }
 }
 
+RelayConfig* ESP32RelayCard::_findRelay(String relayId) {
+    for (auto& r : _cfg.relays) {
+        if (relayId == r.name) {
+            return &r;
+            break;
+        }
+    }
+    return nullptr;
+}
+
 void ESP32RelayCard::_setupWebServer() {
-    // POST /toggle/<name>
     for (size_t i = 0; i < _cfg.relays.size(); i++) {
         const RelayConfig& relay = _cfg.relays[i];
 
-        // Route by name  (e.g. /toggle/gate)
-        String routeName = "/toggle/" + String(relay.name);
-        _server.on(routeName.c_str(), HTTP_POST,
+        _server.on("/toggle", HTTP_POST,
             [this, i](AsyncWebServerRequest* req) {
-                _triggerRelay(_cfg.relays[i]);
-                int read = digitalRead(_cfg.relays[i].pin);
-                String state = read == HIGH ? "high" : "low";
-                req->send(200, "application/json", "{\"ok\":true, \"state\": \"" + state + "\"}");
+                if (!req->hasParam("id")) {
+                    req->send(400, "application/json", "{\"error\": \"missing parameter id\"}");
+                    return;
+                }
+
+                int targetState = -1;
+                if (req->hasParam("set")) {
+                    targetState = (int)req->getParam("set")->value().toInt(); // 1 for HIGH, 0 for LOW
+                }
+                    
+                String relayId = req->getParam("id")->value();
+                RelayConfig* foundRelay = this->_findRelay(relayId);
+
+                if (foundRelay != nullptr) {
+                    this->_triggerRelay(*foundRelay, targetState);  
+
+                    int read = digitalRead(foundRelay->pin);
+                    String state = read == HIGH ? "high" : "low";
+                    req->send(200, "application/json", "{\"state\": \"" + state + "\"}");
+                } else {
+                    req->send(400, "application/json", "{\"error\": \"Invalid Relay ID\"}");
+                }
+            });
+
+        _server.on("/state", HTTP_GET,
+            [this, i](AsyncWebServerRequest* req) {
+                if (!req->hasParam("id")) {
+                    req->send(400, "application/json", "{\"error\": \"missing parameter id\"}");
+                    return;
+                }
+                String relayId = req->getParam("id")->value();
+                RelayConfig* foundRelay = this->_findRelay(relayId);
+                if (foundRelay != nullptr) {
+                    int read = digitalRead(foundRelay->pin);
+                    String state = read == HIGH ? "high" : "low";
+                    req->send(200, "application/json", "{\"state\": \"" + state + "\"}");
+                } else {
+                    req->send(400, "application/json", "{\"error\": \"Invalid Relay ID\"}");
+                }
             });
     }
 
@@ -173,9 +215,8 @@ void ESP32RelayCard::_setupWebServer() {
         help += "GET  /reset/wifi   → reset WiFi and restart\n";
         help += "POST /config/mqtt  → {\"server\":\"\",\"port\":1883,\"topic\":\"\"}\n\n";
         help += "Relays:\n";
-        for (size_t i = 0; i < _cfg.relays.size(); i++) {
-            help += "  POST /toggle/" + String(_cfg.relays[i].name) + "\n";
-        }
+        help += "  POST /toggle?id=name&set?=0|1\n";
+        help += "  GET /state?id=name\n";
         req->send(200, "text/plain", help);
     });
 
