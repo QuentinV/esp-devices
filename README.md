@@ -1,4 +1,4 @@
-# ESP32 devices
+# ESP devices
 
 Multi scripts for different type of devices example.
 Include an ESP32 relay card library to be reused among devices with relays.
